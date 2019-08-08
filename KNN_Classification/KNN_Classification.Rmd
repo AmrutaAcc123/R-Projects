@@ -1,0 +1,219 @@
+---
+title: "Classification using K-Nearest Neighbour"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+
+Clear your environment.
+
+```{r}
+rm(list = ls(all=TRUE))
+```
+
+
+# Agenda 
+
+* Read the dataset
+
+* Data pre-processing
+
+* Explore the dataset
+
+* K-Nearest Neigbour Classification without Standardization
+
+* K-Nearest Neigbour Classification with Standardization
+
+* K-Nearest Neigbour Classification with Condensation
+
+
+# Problem Description
+
+* In the following Supervised Learning activity, we try to classify if loan can be given to a particular customer.
+
+
+# Reading & Understanding the Data
+
+```{r results='hide', message=FALSE, warning=FALSE}
+# Load all packages
+  library(class)
+  library(dummies)
+  library(vegan)
+  library(e1071)
+  library(DMwR)
+  library(caret)
+
+  bank_data = read.csv("UnivBank.csv", header = T, na.strings = c("?","#",""," "))
+  
+```
+
+
+* Understand the dataset.
+
+```{r}
+  str(bank_data)
+  summary(bank_data)
+  sum(is.na(bank_data))
+```
+
+
+* The dataset has 5000 observations of 14 variables
+
+```{r}
+  #See the head and tail of the dataframe
+  head(bank_data)
+  
+  tail(bank_data)
+```
+
+
+# Data Pre-processing
+
+* Removing unwanted columns i.e ID and Zip.Code
+
+```{r}
+bank_data = bank_data[,!(names(bank_data) %in% c("ID","ZIP.Code"))]  # to remove the columns ID & ZIP Code from the data
+```
+
+* Identify the categorical and numerical attributes
+
+```{r}
+  #Store all column names in variable called 'attr'
+  attr = colnames(bank_data)
+  attr
+  
+  #Store all categorical attributes in 'cat_Attr'
+  cat_Attr = c('Personal.Loan','Securities.Account','CD.Account','Online','CreditCard')
+  
+  #Store allthe numerical attributes
+  num_Attr = setdiff(attr, cat_Attr)
+  num_Attr
+```
+
+* Converting Attributes to appropriate types
+
+```{r}
+  # Replacing negative values in Experience attribute with 0
+  bank_data[which(bank_data$Experience < 0),'Experience'] <- 0
+  
+  bank_data[cat_Attr] <- data.frame(sapply(bank_data[cat_Attr], as.factor))
+  
+  str(bank_data)
+```
+
+
+* Imputation for NA values
+
+```{r}
+  # To find out the column names with NA values
+  colSums(is.na(bank_data))
+  
+  bank_data <- centralImputation(bank_data)
+```
+
+
+* Creating Dummies
+
+```{r}
+  # Needed only if the attribute contains more than 2 levels
+  #bank_data <- dummy.data.frame(data = bank_data,names = setdiff(cat_Attr,'Personal.Loan'))
+  
+  # Converting all into numeric data type
+  as.numeric.factor <- function(x) {as.numeric(levels(x))[x]}
+  bank_data[cat_Attr] <- data.frame(sapply(bank_data[cat_Attr], as.numeric.factor))
+
+```
+
+# Model Building
+
+* K-Nearest Neigbour Classification without Standardization
+
+```{r}
+# To get same data in each time
+  set.seed(123) 
+# Convert Personal.Loan to factor
+  bank_data$Personal.Loan <- as.factor(bank_data$Personal.Loan)
+# To take a random sample of  70% of the records for train data 
+  train = sample(1:nrow(bank_data),nrow(bank_data)*0.7) 
+  bankdata_train = bank_data[train,] 
+  bankdata_test = bank_data[-train,] 
+
+# Verifying the ratio of loan takers and non loan takers
+  prop.table(table(bank_data$Personal.Loan))
+  prop.table(table(bankdata_train$Personal.Loan))
+  prop.table(table(bankdata_test$Personal.Loan))
+
+  bankdata_trainwithoutclass = subset(bankdata_train,select=-c(Personal.Loan))
+  bankdata_testwithoutclass = subset(bankdata_test,select=-c(Personal.Loan))
+
+# N = 1/3/5/7
+  Neigh <-3
+  pred=knn(bankdata_trainwithoutclass, bankdata_testwithoutclass, bankdata_train$Personal.Loan, k = Neigh)
+  a=table(pred,bankdata_test$Personal.Loan)
+  a
+  accu= sum(diag(a))/sum(a)
+  accu
+
+```
+
+
+* K-Nearest Neigbour Classification with Standardization
+
+```{r messages = FALSE}
+
+
+  set.seed(123) # To get same data in each time
+  trainRows = sample(1:nrow(bank_data),nrow(bank_data)*0.6) # To take a random sample of  60% of the records for train data 
+
+  bankdata_train = bank_data[trainRows,] 
+  bankdata_test = bank_data[-trainRows,] 
+
+  # NORMALIZE train data using 'Range' method
+  preProcValues <- preProcess(bankdata_train, method=c("range"))
+  bankdata_train <- predict(preProcValues, bankdata_train)
+  # NORMALIZE test data using 'Range' method
+  bankdata_test <- predict(preProcValues, bankdata_test)
+  
+  bankdata_trainwithoutclass = subset(bankdata_train,select=-c(Personal.Loan))
+  bankdata_testwithoutclass = subset(bankdata_test,select=-c(Personal.Loan))
+# N = 1/3/5/7
+  noOfNeigh <- 3
+  pred=knn(bankdata_trainwithoutclass, bankdata_testwithoutclass, bankdata_train$Personal.Loan, k = Neigh)
+  a = table(pred,bankdata_test$Personal.Loan)
+  a
+  accu = sum(diag(a))/nrow(bankdata_testwithoutclass)
+  accu
+  
+```
+
+* K-Nearest Neigbour Classification with Condensation
+
+```{r results='hide', message=FALSE, warning=FALSE}
+# condensing the number of records to compute distances from a test record 
+  keep = condense(bankdata_trainwithoutclass, bankdata_train$Personal.Loan)
+```
+  
+```{r messages = FALSE}  
+# take condensed data and run the model
+  pred = knn(bankdata_trainwithoutclass[keep,], bankdata_testwithoutclass, 
+         bankdata_train$Personal.Loan[keep],k=5)
+  a <- table(pred,bankdata_test$Personal.Loan)
+  a
+  accu=sum(diag(a))/nrow(bankdata_testwithoutclass)
+  accu
+# Selecting the value of K 
+  set.seed(123)
+  ctrl <- trainControl(method="repeatedcv",repeats = 3)
+  knnFit <- train(Personal.Loan ~ ., data = bankdata_train, method = "knn", trControl = ctrl, preProcess = c("center","scale"))
+  knnFit
+  plot(knnFit)
+  pred <- predict(knnFit,bankdata_test)
+  a <- table(pred,bankdata_test$Personal.Loan)
+  a
+  accuracy <- sum(diag(a))/sum(a)
+  accuracy
+  
+```
+
